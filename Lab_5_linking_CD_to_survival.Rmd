@@ -1,0 +1,459 @@
+---
+title: "Linking climate drivers to vital rates"
+date: "11/11/2021"
+output: 
+  html_document:
+    theme: readable
+    toc: true
+
+  
+---
+
+<style type="text/css">
+  body{
+  font-size: 16pt;
+}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::knit_hooks$set(
+  source = function(x, options) {
+    hook.r = function(x, options) {
+      fence <- "```"
+      language = tolower(options$engine)
+      if (language == 'node') language = 'javascript'
+      if (!options$highlight) language = 'text'
+      if(!is.null(options$foldcode)) {
+      paste0('\n\n', "<details><summary>Hint</summary>\n", fence, language, '\n', x, fence,  '\n\n', "</details>\n")
+      } else {
+              paste0('\n\n', fence, language, '\n', x, fence,  '\n\n')
+      }
+    }
+    x = knitr:::hilight_source(x, 'markdown', options)
+    hook.r(
+      paste(c(
+        x, 
+        ''
+      ), collapse = '\n'), 
+      options
+    )
+  }
+)
+
+
+```
+  
+  
+### Introduction  
+Hi there!
+Today we're going to have a detailed look at the survival probability of _Cylindriopuntia imbricata_, and pick a climate driver to help predict said probability. This tutorial should walk you through every step, but feel free to ask us if you get stuck.  
+
+You'll find all the data you need on github (where you also found this document hopefully!)  
+<https://github.com/SanneE1/Lab-5-linking-VR-to-CD>
+
+
+Today we will:  
+1. Dataset: load and filter the biological data  
+2. Exploring survival: explore the survival vital rate through plots  
+3. Base model: find the best base model for survival  
+4. Climate: load and format the climate data
+5. Select climate driver: add climate drivers to the base model and select the best option  
+
+
+
+
+## Dataset
+Let's start with the basics, before you start, please install/load the packages `dplyr`, `lme4`, `bbmle`, `testthat` and if you prefer `ggplot` over base `R` go right ahead. Next we load in the biological data. This data has already been formatted for the most part. Let's have a quick look shall we?  
+
+> Please load the file \'OPIM_indiv_data.csv\' into R
+
+There are 8 columns in the file.  
+* `plantID` = A unique code for each individual plant.  
+* `Plot` = Observations were done across several different plots.  
+* `yearT` = The year the observations were done.  
+* `sizeT` = The size of the individual in yearT. This size was calculated as the log transformed volume of a cone, using plant height, maximum width, and the width perpendicular to the maximum width.  
+* `pflower` = Did the individual flower in year T (0/1).  
+* `fertilityT` = The number of flowers in year T.  
+* `survival` = Did the individual survive from yearT to the next year (yearT1).  
+* `sizeT1` = The size of the individual in the next year (yearT1).  
+
+Now we'll need to filter out some observations that are not useful for us.
+
+> There are some rows, where there is no sizeT. These are either mistakes or seedlings/new individuals. Please select only entries that have a sizeT.  
+
+```{r, foldcode=TRUE, eval=FALSE}
+# one option is to use the selection criteria:
+!(is.na(df$sizeT))
+```
+<br/><br/>
+
+> We also know from the people that gathered data, that the transition from 2018-2019 (T to T1) had some problems, so please filter out this year.  
+
+
+```{r, foldcode=TRUE, results='hide'}
+# dplyr option: use %>% filter()
+
+# base option: try df[which(),]
+
+```
+<br/><br/>
+
+## Exploring survival
+For the next part, we will focus on survival probability. Before we can start exploring this vital rate, and see how we're going to model it, we need to make sure that we have data that only includes entries where we have information.  
+
+> Select only those entries where there are 0's or 1's in the `survival` column  
+
+```{r, foldcode=TRUE, results='hide'}
+# if there's no 0 or 1 in the column it contains NA, so filter out all entries with NA and you're good!
+
+```
+<br/><br/>
+  
+When modelling survival we usually assume it is dependent on a state variable. In this case we have `sizeT` as our state variable. 
+Moreover, we try to use a logistic regression. 
+
+> Please plot the `survival` vs `sizeT`  
+
+It should look a bit like this:  
+
+```{r, echo=FALSE, warning=FALSE}
+library(ggplot2)
+df <- read.csv("OPIM_indiv_data.csv")
+ggplot(df) +
+  geom_jitter(aes(x = sizeT, y = survival), height = 0.02)
+```
+
+It looks like there's a higher probability of surviving, with increasing size. But because there's only 0 and 1's, it makes it a bit harder to see. An other way to visualize the data, is using binned averages. What this means is that you divide the x-axis in several bins, and per bin, you calculate the mean value. If half the individuals survive in a certain bin (range of size), the average value is 0.5. While this isn't perfect, such a binned graph can show a clearer picture of how the state variable (size) influences such a binomial probability.  
+
+> Use the functions in the "binned_plot_functions.R" file, and use the `logitbin()` function to create a binned survival plot. See how many bins (n) you would need to best represent the effect size has on survival!  
+
+
+```{r, foldcode=TRUE, results='hide'}
+# Have a look at the source() function.
+
+# You can open the file, and run all of it, but next time you run the code, it won't work unless you do this again.
+# You can also copy the code in the file to your working script, but this is a bit "ugly" as you'll have lot's of rows of the function, making it harder to find the "actual science" in your script.
+# Using source will require one row in you script, and makes it reproducable (after restart for example)
+
+```  
+<br/><br/> 
+```{r, foldcode=TRUE, results='hide'}
+# Make sure you haven't changed the names of the columns, from the original file
+```  
+<br/><br/> 
+```{r, foldcode=TRUE, results='hide'}
+# df (dataframe) is where the biological data goes
+```  
+<br/><br/> 
+Your binned plot give a nice overview of the averages. However, this data spans 12 years, and there's a lot of things that can happen in a year to change survival probability (climate being only one of them!)
+
+> Use the function `logitbin_yr` to get yearly binned averages, and create a plot for each year  
+
+```{r, foldcode=TRUE, results='hide', eval=FALSE}
+# The function returns a ggplot object, and you can add a ggplot-function to the logitbin_yr() function, or the object where you saved the output
+
+logitbin_yr() + .....
+
+```  
+<br/><br/>
+```{r, foldcode=TRUE, eval=FALSE}
+# use the facet_wrap() function
+logitbin_yr(...) + facet_wrap(vars(...))
+```  
+<br/><br/>
+
+> Can you find differences between the years? Does your answer change if you change the number of bins?  
+
+
+## Base model
+Before we can start looking at which climate driver best predicts the survival probability, we need to find a base model that we use for the comparisons. For this base model we need to decide and try out a few things.
+
+We have survival as the response variable (y variable) and the graphs show we can pretty confidently assume that survival is dependent on sizeT (x variable). The next questions we need to answer are:
+
+> Can we use a linear model, or should we use a generalized linear model  
+
+```{r, foldcode=TRUE}
+# we need to decide between the lm() and glm() function. Have a look at the help pages!
+```  
+<br/><br/>
+```{r, foldcode=TRUE}
+# Our response variable is binomial (0/1)
+```  
+<br/><br/>
+
+  
+> Which are the other factors that could influence survival probability  
+
+```{r, foldcode=TRUE}
+# Have a look at the columns in the biological data you have loaded
+
+```  
+<br/><br/>
+
+> For those other factors, would a fixed effect or random effect be more appropriate?  
+
+```{r, foldcode=TRUE}
+# How many categories/levels are there.
+# Only a few = fixed effects
+# A lot = fixed effects or random effects
+```  
+<br/><br/>
+```{r, foldcode=TRUE}
+# Can we expect "full memory loss" (fixed effect) or some similarities/relationship between the categories (random effects)
+```  
+<br/><br/> 
+
+> Which of the models with fixed and or random effects would be best?  
+
+```{r, foldcode=TRUE}
+# The most basic model would be: 
+# survival ~ sizeT
+# you build it up from there
+```  
+<br/><br/>
+```{r, foldcode=TRUE}
+# Fixed factors are added by adding ("+ ...") the function hinted at above.
+# Random factors (random intercept) are added by adding the factor as "+ (1|...)"
+```  
+<br/><br/>
+```{r, foldcode=TRUE, eval=FALSE}
+# One option would be:
+glm(survival ~ size + Plot + (1|year), data = df, family = "binomial")
+# Here Plot is a fixed effect, and year is a random effect
+```  
+<br/><br/>
+```{r, foldcode=TRUE}
+# Create different glm() and glmer() models, put them in a list with unique names, and use the bbmle::AICctab() function to easily compare the different options
+
+```  
+<br/><br/>
+
+# Climate
+Next we need to gather climate data.  
+
+> Go ahead an read in the "OPIM_climate.csv". We don't need the X column. please remove this column 
+
+```{r, foldcode=TRUE}
+# Try the select() function. To deselect a column, but a '-' in front of it
+```  
+<br/><br/>
+
+You will now have a file with 4 columns:  
+
+* `year` = year of the census (yearT).  
+* `SPEI_may_recent` = SPEI value of May in the year of census.  
+* `tmin_feb_may_lag` = mean minimum temperature in the year before census, from February to May.  
+* `tavg_apr_oct_lag` = average temperature in the year before census, from April to October. 
+
+As you can see, I have already selected 3 possible climate drivers (climate variable and time window). However, to use these climate drivers in the regressions, we need to add this information to a dataframe that also includes the individual observations
+
+> Please merge the climate data with the individual observation data
+
+```{r, foldcode=TRUE}
+# Use the left_join() function
+``` 
+<br/><br/>
+```{r, foldcode=TRUE}
+# Use the 'by' argument to specify the column names that contain the same information.
+``` 
+<br/><br/>
+
+# Select climate driver
+We have now thoroughly explored _C. imbricata_'s survival, both through graphical representation and modelling. We have also prepared all the data we need to start investigating the climate effects. So the only thing remaining is to model the climate driver and select the one that improves our predictions the most.
+
+> Please add each climate driver to the base model you selected previously as a fixed factor. Which of the three models is the best?
+
+```{r, foldcode=TRUE}
+# Go through the same steps as you did to select the base model!
+``` 
+<br/><br/>
+
+yay! we did it!  
+Now it's time to see what this climate model is actually telling us about _C. imbricata_ and the climate effect!
+
+> Use the `summary()` function to look at the best model. What is the effect of the selected climate driver on _C. imbricata_'s survival probability?
+
+> Compare the summary you used above, with the `summary()` of the base function (so without the climate). What are the differences? (Both in the fixed and random effects)
+
+```{r, foldcode=TRUE}
+# Look at the estimates of the intercept, size slope and fixed effects, as well as changes in std.Error and p-value (Pr(>|z|)) column.
+``` 
+<br/><br/>
+```{r, foldcode=TRUE}
+# Look at the changes in the variance of the random effects
+``` 
+<br/><br/>
+
+The last thing we're going to do, is see if we can plot the prediction of this model, with a few different climate values. This will visualize the effect the climate driver, which is especially helpful once you get to more complex models.
+
+To plot the predictions of a model, there are quite a few fancy packages, but we'll keep it pretty basic, and stick with the `predict()` function. One of the uses of this function is to give it a model, and a dataframe with values of all the variables on the right side of the `~` in our equation. It will then use the model and those values to give you the estimate of the response variable (survival in this case)
+
+> First we need to create a new dataframe. For this, please create a factor with `seq()` ranging from the smallest to largest observed size.
+
+```{r, foldcode=TRUE}
+# you can use min(df$sizeT) and max(df$sizeT) to find the maximum values
+``` 
+<br/><br/>
+```{r, foldcode=TRUE}
+# Look at the help function to see which argument you would need to specify the number of values between the min and max. The more you take, the smoother the results will be, but taking too many will take ages to calculate (start on the lower end, and you can always increase this number once you have the full code written!)
+``` 
+<br/><br/>
+
+> Second, we need a (single) value for each of the fixed effects (except the climate driver) that you might have in your model. Assign this(these) value(s) to an object/ to objects
+
+```{r, foldcode=TRUE, eval=FALSE}
+# SPOILER (I've been trying to keep this tutorial free of them, but here's one now!):
+
+# During my model selection, a model without fixed effects came up as best, if yours is too, you can skip this step. If you do have a model with a fixed effect, don't worry! My guess would be that you have Plot as a fixed effect. If so, just pick a plot value (for example "T1") and assign that to an object. 
+plot <- "T1"
+
+# If you have another one, do the same, or ask one of us!
+
+``` 
+<br/><br/>
+
+> Third, we will pick 3 values for your climate driver. I would suggest mean climate, a low and high value, that are equal distance from the mean.
+
+```{r, foldcode=TRUE}
+# Remember that we are using climate anomalies, so it is scaled around 0.
+``` 
+<br/><br/>
+```{r, foldcode=TRUE}
+# Have a look at the mean() and sd() output of the climate driver column!
+# My suggestion would be to take mean +/- sd 
+``` 
+<br/><br/>
+
+> Next, use the `expand.grid("sizeT" = ..., climate_driver = ...)` function to create a dataframe. For `climate_driver`, use the exact name that you also use in the model. 
+
+The dataframe that is created will have a size sequence for each of the climate values (as well as for every possible combination with a fixed factor) 
+
+> Finally, use `predict()` to estimate survival probabilities for each size, under different climate values. Use the `newdata =` arugment to supply your new dataframe. Moreover, if you have a model with random variables, use the argument `re.form=NA`, telling the function to ignore or set all random effects to 0.  
+
+> Go ahead an plot the data
+
+Now, if your graph looks like mine, you'll get a straight line. Mine even goes from negative values to +5.....
+But we've been working on survival probability, that's either 1 or 0... How is that possible!!
+
+> Any idea why we get these linear lines??
+
+```{r, foldcode=TRUE}
+# The clue lies in the name of the models! we've been using generalized LINEAR (mixed effects) models.
+``` 
+<br/><br/>
+```{r, foldcode=TRUE}
+# During the modelling, we specify "family = binomial". This creates a link function, that allows us to transform the 0/1 data and the logistic (s-ish) curve into a linear function. This allows us to use the same methods as we would do, to estimate a truly linear function.
+``` 
+<br/><br/>
+```{r, foldcode=TRUE}
+# When we used the predict() function, we left one argument on default (well, several actually, but only one results in this linear line). 
+# The argument "type" is set to link as a default. This means predict() returns values that are "fed" into the link function, instead of the actual survival probability that we want, as you get this only after transforming predict()'s output with the logistic link function.
+``` 
+<br/><br/>
+
+One option to get the actual survival probabilities is to transform the predicted column using the inverse logistic function
+$exp(x)/(1 + exp(x))$
+
+The easier one, is to just tell `predict()` that we're looking for the actual response value. 
+
+> To plot the familiar logistic function, add the argument `type = "response"` to your predict function. Use these data to plot the survival again.
+
+> Can you tell, when climate has the biggest effect on survival probability?
+
+```{r, foldcode=TRUE}
+# Have a look at the vertical distance between the different lines. Is this distance always the same size?
+``` 
+<br/><br/>
+
+# Wrap up
+That's it for today!  
+Today we've gone through several steps to find out which climate driver improves our predictions of survival in _C. imbricata_ the most. As you can see, there are many steps just to get this far, and we haven't even started to build any sort of population model yet.  
+However, it is important to keep in mind, that for IPMs, MPMs and several other population models, vital rate functions form the very building blocks of your model. No matter how detailed or fancy your population model is, building it with poorly thought out or poorly selected vital rate functions will just mean you have a fancy, inaccurate population model...  
+Most of the times, you spent more time on modelling the vital rates, than on actually building a population model, and that's absolutely fine (and how it should be in my opinion).  
+Other vital rates, and sometimes other state variables, will vary in details, such as the type of models used, but the steps we've gone through today, are also steps you take for the other vital rates.  
+Today we only focused on selecting one climate driver out of 3 options, which I pre-selected for this tutorial. Usually there are a lot more climate driver options, and types to choose from. Your actual choice of method and climate drivers, as well as the number of climate drivers, will mostly depend on your species, available data and research question. If you are interested in reading more on this, I would be happy to recommend some papers!  
+There are of course also more complicated vital rate model options, such as non-linear and/or Bayesian models. Again, the choice for the "right" method should depend on your species and data (not on what you're familiar with, or find easier). Luckily there's a whole lot of material out there to help you select and apply the method of your choice.
+
+If you still have questions, I would be happy to talk with you about them. If those question come up after the tutorial, please don't hesitate to send me a quick email <sanne.evers@idiv.de>
+
+Sanne
+
+
+
+
+
+
+```{r, echo=FALSE, eval=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(lme4)
+
+df <- read.csv("OPIM_indiv_data.csv")
+
+df <- df[which(!(is.na(df$sizeT))),] # filter out individuals without size in time t
+df <- df[which(df$year != 2018),] # filter out transition year 2018
+
+### plotting survival yearly binned plots
+logitbin_yr(df = df, n = 8) + facet_wrap(vars(yearT))
+logitbin_yr(df = df, n = 12) + facet_wrap(vars(yearT))
+
+### Finding the best base model
+
+candidate_glmer <- list(
+  "ran_yr" = survival ~ sizeT + (1|yearT),
+  "ran_id" = survival ~ sizeT + (1|plantID),
+  "ran_plot" = survival ~ sizeT + (1|Plot),
+  "plot_yr" = survival ~ sizeT + Plot + (1|yearT)
+)
+candidate_glm <- list(
+  "null" = survival ~ sizeT,
+  "plot" = survival ~ sizeT + Plot
+)
+
+glmer_mods <- lapply(candidate_glmer, function(x) glmer(x, data = df, family = "binomial"))
+glm_mods <- lapply(candidate_glm, function(x) glm(x, data = df, family = "binomial"))
+
+mods <- append(glmer_mods, glm_mods)
+as.data.frame(bbmle::AICtab(mods, weights = T, base = T))
+
+### Load climate data
+
+clim <- read.csv("OPIM_climate.csv") %>%
+  select(-c(X))
+
+df_clim <- left_join(df, clim, by = c("yearT" = "year"))
+
+### Select best climate driver
+climate_mods <- list(
+  "tavg" = survival ~ sizeT + tavg_apr_oct_lag + (1|yearT),
+  "tmin" = survival ~ sizeT + tmin_feb_may_lag + (1|yearT),
+  "SPEI" = survival ~ sizeT + SPEI_may_recent + (1|yearT)
+) %>%
+  lapply(., function(x) glmer(x, data = df_clim, family = "binomial"))
+
+as.data.frame(bbmle::AICctab(climate_mods, weights = T, base = T))
+
+summary(climate_mods[["tavg"]])
+summary(mods[["ran_yr"]])
+
+### Plot Predictions
+
+sizeT <- seq(from = min(df_clim$sizeT), to = max(df_clim$sizeT), length.out = 50)
+climdr <- c(-0.2, 0, 0.2)
+
+pred_df <- expand.grid("sizeT" = sizeT, "tavg_apr_oct_lag" = climdr)
+
+pred_df$pred_surv <- predict(climate_mods[["tavg"]], re.form=NA, newdata = pred_df)
+
+ggplot(pred_df) + geom_point(aes(x = sizeT, y = pred_surv, colour = tavg_apr_oct_lag)))
+
+pred_df$calc_surv <- boot::inv.logit(pred_df$pred_surv)
+pred_df$surv <- predict(climate_mods[["tavg"]], re.form=NA, newdata = pred_df, type = "response")
+
+ggplot(pred_df) + geom_point(aes(x = sizeT, y = surv, colour = tavg_apr_oct_lag))
+
+```
+
